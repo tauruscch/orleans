@@ -96,12 +96,12 @@ For example, to include all three providers (of course, you probably won&#39;t n
 <pre><code class="lang-csharp">builder.AddLogStorageBasedLogConsistencyProvider(&quot;LogStorage&quot;)
 </code></pre><h2 id="grain-class-attributes">Grain Class Attributes</h2>
 <p>Each journaled grain class must have a <code>LogConsistencyProvider</code> attribute to specify the log-consistency provider. Some providers additionally require a <code>StorageProvider</code> attribute.
-Eg:
-[StorageProvider(ProviderName = &quot;OrleansLocalStorage&quot;)]
+Eg:</p>
+<pre><code class="lang-csharp">[StorageProvider(ProviderName = &quot;OrleansLocalStorage&quot;)]
 [LogConsistencyProvider(ProviderName = &quot;LogStorage&quot;)]
-    public class EventSourcedBankAccountGrain : JournaledGrain<bankaccountstate>, IEventSourcedBankAccountGrain
-  {}<p>
-<p>So here &quot;OrleansLocalStorage&quot; is being used for storing the grain state, where was &quot;LogStorage&quot; is the in-memory storage provider for EventSourcing events.</p>
+public class EventSourcedBankAccountGrain : JournaledGrain&lt;BankAccountState&gt;, IEventSourcedBankAccountGrain
+{ ... }
+</code></pre><p>So here &quot;<code>OrleansLocalStorage</code>&quot; is being used for storing the grain state, where was &quot;<code>LogStorage</code>&quot; is the in-memory storage provider for EventSourcing events.</p>
 <h3 id="logconsistencyprovider-attributes">LogConsistencyProvider Attributes</h3>
 <p>To specify the log-consistency provider, add a <code>[LogConsistencyProvider(ProviderName=...)]</code> attribute to the grain class, and give the name of the provider as configured by the Cluster Configuration. For example:</p>
 <pre><code class="lang-csharp">[LogConsistencyProvider(ProviderName = &quot;CustomStorage&quot;)]
@@ -119,7 +119,7 @@ public class ChatGrain : JournaledGrain&lt;XDocument, IChatEvent&gt;, IChatGrain
 &lt;StorageProviders&gt;
   &lt;Provider Type=&quot;Orleans.Storage.MemoryStorage&quot; Name=&quot;Default&quot; /&gt;
 &lt;/StorageProviders&gt;
-</code></pre></bankaccountstate></article>
+</code></pre></article>
           </div>
           
           <div class="hidden-sm col-md-2" role="complementary">
