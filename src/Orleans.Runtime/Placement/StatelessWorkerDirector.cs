@@ -40,12 +40,12 @@ namespace Orleans.Runtime.Placement
             }
 
             // otherwise, place somewhere else
-            return Task.FromResult(compatibleSilos[random.Next(compatibleSilos.Count)]);
+            return Task.FromResult(compatibleSilos[random.Next(compatibleSilos.Length)]);
         }
 
         private PlacementResult SelectActivationCore(PlacementStrategy strategy, GrainId target, IPlacementRuntime context)
         {
-            if (target.IsClient)
+            if (target.IsClient())
                 throw new InvalidOperationException("Cannot use StatelessWorkerStrategy to route messages to client grains.");
 
             // If there are available (not busy with a request) activations, it returns the first one.

@@ -21,14 +21,12 @@ namespace Orleans.Runtime.Messaging
             SiloAddress remoteSiloAddress,
             ConnectionContext connection,
             ConnectionDelegate middleware,
-            IServiceProvider serviceProvider,
-            INetworkingTrace trace,
             MessageCenter messageCenter,
-            MessageFactory messageFactory,
             ILocalSiloDetails localSiloDetails,
             ConnectionManager connectionManager,
-            ConnectionOptions connectionOptions)
-            : base(connection, middleware, messageFactory, serviceProvider, trace)
+            ConnectionOptions connectionOptions,
+            ConnectionCommon connectionShared)
+            : base(connection, middleware, connectionShared)
         {
             this.messageCenter = messageCenter;
             this.connectionManager = connectionManager;
@@ -62,16 +60,20 @@ namespace Orleans.Runtime.Messaging
             // Don't process messages that have already timed out
             if (msg.IsExpired)
             {
-                msg.DropExpiredMessage(this.Log, MessagingStatisticsGroup.Phase.Receive);
+                this.MessagingTrace.OnDropExpiredMessage(msg, MessagingStatisticsGroup.Phase.Receive);
                 return;
             }
 
             // If we've stopped application message processing, then filter those out now
             // Note that if we identify or add other grains that are required for proper stopping, we will need to treat them as we do the membership table grain here.
-            if (messageCenter.IsBlockingApplicationMessages && (msg.Category == Message.Categories.Application) && !Constants.SystemMembershipTableId.Equals(msg.SendingGrain))
+            if (messageCenter.IsBlockingApplicationMessages && (msg.Category == Message.Categories.Application) && !Constants.SystemMembershipTableType.Equals(msg.SendingGrain))
             {
                 // We reject new requests, and drop all other messages
-                if (msg.Direction != Message.Directions.Request) return;
+                if (msg.Direction != Message.Directions.Request)
+                {
+                    this.MessagingTrace.OnDropBlockedApplicationMessage(msg);
+                    return;
+                }
 
                 MessagingStatisticsGroup.OnRejectedMessage(msg);
                 var rejection = this.MessageFactory.CreateRejectionResponse(msg, Message.RejectionTypes.Unrecoverable, "Silo stopping");
@@ -84,7 +86,10 @@ namespace Orleans.Runtime.Messaging
             if ((msg.TargetSilo == null) || msg.TargetSilo.Matches(this.LocalSiloAddress))
             {
                 // See if it's a message for a client we're proxying.
-                if (messageCenter.IsProxying && messageCenter.TryDeliverToProxy(msg)) return;
+                if (messageCenter.TryDeliverToProxy(msg))
+                {
+                    return;
+                }
 
                 // Nope, it's for us
                 messageCenter.OnReceivedMessage(msg);
@@ -263,7 +268,8 @@ namespace Orleans.Runtime.Messaging
             // Don't send messages that have already timed out
             if (msg.IsExpired)
             {
-                msg.DropExpiredMessage(this.Log,  MessagingStatisticsGroup.Phase.Send);
+                this.MessagingTrace.OnDropExpiredMessage(msg,  MessagingStatisticsGroup.Phase.Send);
+
                 if (msg.IsPing())
                 {
                     this.Log.LogWarning("Droppping expired ping message {Message}", msg);
@@ -273,8 +279,7 @@ namespace Orleans.Runtime.Messaging
             }
 
             // Fill in the outbound message with our silo address, if it's not already set
-            if (msg.SendingSilo == null)
-                msg.SendingSilo = this.LocalSiloAddress;
+            msg.SendingSilo ??= this.LocalSiloAddress;
 
             if (this.Log.IsEnabled(LogLevel.Debug) && msg.IsPing())
             {
@@ -303,15 +308,14 @@ namespace Orleans.Runtime.Messaging
             MessagingStatisticsGroup.OnFailedSentMessage(msg);
             if (msg.Direction == Message.Directions.Request)
             {
-                if (this.Log.IsEnabled(LogLevel.Debug)) this.Log.Debug(ErrorCode.MessagingSendingRejection, "Silo {SiloAddress} is rejecting message: {Message}. Reason = {Reason}", this.LocalSiloAddress, msg, reason);
+                if (this.Log.IsEnabled(LogLevel.Debug)) this.Log.LogDebug((int)ErrorCode.MessagingSendingRejection, "Silo {SiloAddress} is rejecting message: {Message}. Reason = {Reason}", this.LocalSiloAddress, msg, reason);
 
                 // Done retrying, send back an error instead
                 this.messageCenter.SendRejection(msg, Message.RejectionTypes.Transient, $"Silo {this.LocalSiloAddress} is rejecting message: {msg}. Reason = {reason}");
             }
             else
             {
-                this.Log.Info(ErrorCode.Messaging_OutgoingMS_DroppingMessage, "Silo {SiloAddress} is dropping message: {Message}. Reason = {Reason}", this.LocalSiloAddress, msg, reason);
-                MessagingStatisticsGroup.OnDroppedSentMessage(msg);
+                this.MessagingTrace.OnSiloDropSendingMessage(this.LocalSiloAddress, msg, reason);
             }
         }
 

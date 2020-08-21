@@ -12,16 +12,19 @@ namespace UnitTests.GrainInterfaces
     {
         [MethodId(14142)]
         Task<string> One();
+        [MethodId(-14142)]
         Task<string> Echo(string someArg);
         Task<string> NotIntercepted();
         Task<string> Throw();
         Task<string> IncorrectResultType();
         Task FilterThrows();
     }
-    
+
+    [TypeCodeOverride(-6548972)]
     public interface IOutgoingMethodInterceptionGrain : IGrainWithIntegerKey
     {
         Task<Dictionary<string, object>> EchoViaOtherGrain(IMethodInterceptionGrain otherGrain, string message);
+        Task<string> ThrowIfGreaterThanZero(int value);
     }
 
     public interface IGenericMethodInterceptionGrain<in T> : IGrainWithIntegerKey, IMethodFromAnotherInterface
@@ -45,9 +48,11 @@ namespace UnitTests.GrainInterfaces
     }
 
     public interface IGrainCallFilterTestGrain : IGrainWithIntegerKey
-    { 
-        Task<string> CallWithBadInterceptors(bool early, bool mid, bool late);
+    {
+        Task<string> ThrowIfGreaterThanZero(int value);
         Task<string> GetRequestContext();
+
+        Task<int> SumSet(HashSet<int> numbers);
     }
 
     public interface IHungryGrain<T> : IGrainWithIntegerKey

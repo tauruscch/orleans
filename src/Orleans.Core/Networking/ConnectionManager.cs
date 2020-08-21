@@ -19,7 +19,7 @@ namespace Orleans.Runtime.Messaging
         private readonly ConcurrentDictionary<SiloAddress, ConnectionEntry> connections = new ConcurrentDictionary<SiloAddress, ConnectionEntry>();
         private readonly ConnectionOptions connectionOptions;
         private readonly ConnectionFactory connectionFactory;
-        private readonly INetworkingTrace trace;
+        private readonly NetworkingTrace trace;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private readonly object lockObj = new object();
         private readonly TaskCompletionSource<int> closedTaskCompletionSource = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -27,7 +27,7 @@ namespace Orleans.Runtime.Messaging
         public ConnectionManager(
             IOptions<ConnectionOptions> connectionOptions,
             ConnectionFactory connectionFactory,
-            INetworkingTrace trace)
+            NetworkingTrace trace)
         {
             this.connectionOptions = connectionOptions.Value;
             this.connectionFactory = connectionFactory;
@@ -72,10 +72,19 @@ namespace Orleans.Runtime.Messaging
             return new ValueTask<Connection>(this.GetConnectionAsync(endpoint));
         }
 
+        public bool TryGetConnection(SiloAddress endpoint, out Connection connection)
+        {
+            if (this.connections.TryGetValue(endpoint, out var entry))
+            {
+                return entry.TryGetConnection(out connection);
+            }
+
+            connection = null;
+            return false;
+        }
+
         private async Task<Connection> GetConnectionAsync(SiloAddress endpoint)
         {
-            RequestContext.Clear();
-
             while (true)
             {
                 await Task.Yield();
@@ -271,7 +280,7 @@ namespace Orleans.Runtime.Messaging
             }
         }
 
-        public void Abort(SiloAddress endpoint)
+        public void Close(SiloAddress endpoint)
         {
             ConnectionEntry entry;
             lock (this.lockObj)
@@ -292,12 +301,11 @@ namespace Orleans.Runtime.Messaging
 
             if (entry is ConnectionEntry && !entry.Connections.IsDefault)
             {
-                var exception = new ConnectionAbortedException($"Aborting connection to {endpoint}");
                 foreach (var connection in entry.Connections)
                 {
                     try
                     {
-                        connection.Close(exception);
+                        connection.Close();
                     }
                     catch
                     {
@@ -312,7 +320,6 @@ namespace Orleans.Runtime.Messaging
             {
                 this.cancellation.Cancel(throwOnFirstException: false);
 
-                var connectionAbortedException = new ConnectionAbortedException("Stopping");
                 var cycles = 0;
                 while (this.ConnectionCount > 0)
                 {
@@ -323,7 +330,7 @@ namespace Orleans.Runtime.Messaging
                         {
                             try
                             {
-                                connection.Close(connectionAbortedException);
+                                connection.Close();
                             }
                             catch
                             {

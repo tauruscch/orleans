@@ -12,6 +12,7 @@ using Orleans.Runtime;
 using Orleans.Streams;
 using Orleans.ServiceBus.Providers.Testing;
 using Orleans.Hosting;
+using System.IO;
 
 namespace Orleans.ServiceBus.Providers
 {
@@ -56,7 +57,7 @@ namespace Orleans.ServiceBus.Providers
         private AggregatedQueueFlowController flowController;
 
         // Receiver life cycle
-        private int recieverState = ReceiverShutdown;
+        private int receiverState = ReceiverShutdown;
 
         private const int ReceiverShutdown = 0;
         private const int ReceiverRunning = 1;
@@ -91,7 +92,7 @@ namespace Orleans.ServiceBus.Providers
         {
             this.logger.Info("Initializing EventHub partition {0}-{1}.", this.settings.Hub.Path, this.settings.Partition);
             // if receiver was already running, do nothing
-            return ReceiverRunning == Interlocked.Exchange(ref this.recieverState, ReceiverRunning)
+            return ReceiverRunning == Interlocked.Exchange(ref this.receiverState, ReceiverRunning)
                 ? Task.CompletedTask
                 : Initialize();
         }
@@ -128,7 +129,7 @@ namespace Orleans.ServiceBus.Providers
 
         public async Task<IList<IBatchContainer>> GetQueueMessagesAsync(int maxCount)
         {
-            if (this.recieverState == ReceiverShutdown || maxCount <= 0)
+            if (this.receiverState == ReceiverShutdown || maxCount <= 0)
             {
                 return new List<IBatchContainer>();
             }
@@ -210,9 +211,9 @@ namespace Orleans.ServiceBus.Providers
             return false;
         }
 
-        public IQueueCacheCursor GetCacheCursor(IStreamIdentity streamIdentity, StreamSequenceToken token)
+        public IQueueCacheCursor GetCacheCursor(StreamId streamId, StreamSequenceToken token)
         {
-            return new Cursor(this.cache, streamIdentity, token);
+            return new Cursor(this.cache, streamId, token);
         }
 
         public bool IsUnderPressure()
@@ -231,7 +232,7 @@ namespace Orleans.ServiceBus.Providers
             try
             {
                 // if receiver was already shutdown, do nothing
-                if (ReceiverShutdown == Interlocked.Exchange(ref this.recieverState, ReceiverShutdown))
+                if (ReceiverShutdown == Interlocked.Exchange(ref this.receiverState, ReceiverShutdown))
                 {
                     return;
                 }
@@ -305,12 +306,12 @@ namespace Orleans.ServiceBus.Providers
         /// For test purpose. ConfigureDataGeneratorForStream will configure a data generator for the stream
         /// </summary>
         /// <param name="streamId"></param>
-        internal void ConfigureDataGeneratorForStream(IStreamIdentity streamId)
+        internal void ConfigureDataGeneratorForStream(StreamId streamId)
         {
             (this.receiver as EventHubPartitionGeneratorReceiver)?.ConfigureDataGeneratorForStream(streamId);
         }
 
-        internal void StopProducingOnStream(IStreamIdentity streamId)
+        internal void StopProducingOnStream(StreamId streamId)
         {
             (this.receiver as EventHubPartitionGeneratorReceiver)?.StopProducingOnStream(streamId);
         }
@@ -318,8 +319,7 @@ namespace Orleans.ServiceBus.Providers
         private class StreamActivityNotificationBatch : IBatchContainer
         {
             public StreamPosition Position { get; }
-            public Guid StreamGuid => this.Position.StreamIdentity.Guid;
-            public string StreamNamespace => this.Position.StreamIdentity.Namespace;
+            public StreamId StreamId => this.Position.StreamId;
             public StreamSequenceToken SequenceToken => this.Position.SequenceToken;
 
             public StreamActivityNotificationBatch(StreamPosition position)
@@ -329,7 +329,7 @@ namespace Orleans.ServiceBus.Providers
 
             public IEnumerable<Tuple<T, StreamSequenceToken>> GetEvents<T>() { throw new NotSupportedException(); }
             public bool ImportRequestContext() { throw new NotSupportedException(); }
-            public bool ShouldDeliver(IStreamIdentity stream, object filterData, StreamFilterPredicate shouldReceiveFunc) { throw new NotSupportedException(); }
+            public bool ShouldDeliver(StreamId stream, object filterData, StreamFilterPredicate shouldReceiveFunc) { throw new NotSupportedException(); }
         }
 
         private class Cursor : IQueueCacheCursor
@@ -338,10 +338,10 @@ namespace Orleans.ServiceBus.Providers
             private readonly object cursor;
             private IBatchContainer current;
 
-            public Cursor(IEventHubQueueCache cache, IStreamIdentity streamIdentity, StreamSequenceToken token)
+            public Cursor(IEventHubQueueCache cache, StreamId streamId, StreamSequenceToken token)
             {
                 this.cache = cache;
-                this.cursor = cache.GetCursor(streamIdentity, token);
+                this.cursor = cache.GetCursor(streamId, token);
             }
 
             public void Dispose()
